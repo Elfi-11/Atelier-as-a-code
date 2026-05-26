@@ -346,13 +346,25 @@ def run_fetch_and_clean_from_minio(
     return run_clean_patient_csv(staging_dir, paths)
 
 
+def _sql_value(value):
+    """Convertit NaN/NA pandas en NULL SQL."""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return value
+
+
 def run_load_to_postgres(cleaned_path: str | Path, db_url: str | None = None) -> None:
     """Charge le CSV nettoyé dans PostgreSQL (service + patient)."""
     path = Path(cleaned_path)
     if not path.exists():
         raise FileNotFoundError(f"Fichier nettoyé introuvable : {path}")
 
-    df = pd.read_csv(path, sep=";")
+    df = pd.read_csv(path, sep=";", keep_default_na=True)
     url = db_url or DB_URL
     print(f"Chargement PostgreSQL ({url.split('@')[-1]})...")
     engine = create_engine(url)
@@ -384,7 +396,18 @@ def load_to_postgres(df: pd.DataFrame, engine) -> None:
 
         for _, row in df.iterrows():
             service_nom = row.get("service_nom")
-            id_service = service_ids.get(service_nom) if pd.notna(service_nom) else None
+            id_service = (
+                service_ids.get(service_nom) if pd.notna(service_nom) else None
+            )
+            age = _sql_value(row.get("age"))
+            if age is not None:
+                age = int(age)
+            est_valide = row.get("est_valide")
+            if pd.isna(est_valide):
+                est_valide = False
+            else:
+                est_valide = bool(est_valide)
+
             conn.execute(
                 text(
                     """
@@ -398,16 +421,16 @@ def load_to_postgres(df: pd.DataFrame, engine) -> None:
                     """
                 ),
                 {
-                    "nom": row["nom"],
-                    "prenom": row["prenom"],
-                    "age": row["age"],
-                    "tel": row["tel"],
-                    "pathologie": row["pathologie"],
-                    "commentaire": row["commentaire"],
+                    "nom": _sql_value(row.get("nom")),
+                    "prenom": _sql_value(row.get("prenom")),
+                    "age": age,
+                    "tel": _sql_value(row.get("tel")),
+                    "pathologie": _sql_value(row.get("pathologie")),
+                    "commentaire": _sql_value(row.get("commentaire")),
                     "id_service": id_service,
-                    "fichier_source": row["fichier_source"],
-                    "est_valide": bool(row["est_valide"]),
-                    "motif_correction": row["motif_correction"],
+                    "fichier_source": _sql_value(row.get("fichier_source")),
+                    "est_valide": est_valide,
+                    "motif_correction": _sql_value(row.get("motif_correction")),
                 },
             )
 

@@ -92,6 +92,9 @@ services:
       airflow-init:
         condition: service_completed_successfully
     restart: unless-stopped
+    volumes:
+    - ./data:/opt/airflow/data
+    - ./dags:/opt/airflow/dags
 
   airflow-scheduler:
     <<: *airflow-common

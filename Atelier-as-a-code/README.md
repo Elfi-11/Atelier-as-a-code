@@ -42,6 +42,19 @@ Depuis la racine du dépôt Git :
 cd Atelier-as-a-code
 ```
 
+## Repartir de zéro (prune + relance)
+
+À lancer **depuis ce dossier** (`Atelier-as-a-code/`, là où se trouve ce `docker-compose.yaml`) :
+
+```powershell
+cd C:\Users\Admin\Atelier-as-a-code\Atelier-as-a-code
+docker compose down -v
+docker system prune -f
+docker compose up -d --build
+```
+
+`down -v` recrée Postgres et MinIO vides ; les scripts `sql/` recréent la base **`hopital`**.
+
 ## Démarrage rapide
 
 ### 1. Lancer l'infrastructure

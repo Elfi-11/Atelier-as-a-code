@@ -1,3 +1,14 @@
+# Fichier unique du projet : lancer depuis ce dossier (Atelier-as-a-code/)
+#
+# Connexions depuis ton PC (DBeaver, navigateur) :
+#   PostgreSQL métier  → localhost:5432  | DB hopital  | hopital / hopital
+#   PostgreSQL Airflow → localhost:5432  | DB airflow  | airflow / airflow
+#   Airflow UI         → http://localhost:8080           | airflow / airflow
+#   MinIO Console      → http://localhost:9001           | minio / minio123
+#
+# Connexions entre conteneurs Docker (scripts, DAG) :
+#   Postgres → postgres:5432 | MinIO → http://minio:9000 | Airflow API → http://airflow:8080
+
 x-airflow-common: &airflow-common
   build: .
   environment: &airflow-env
@@ -6,9 +17,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__API_AUTH__JWT_SECRET: dev-jwt-secret-change-me-32chars
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-  # Airflow 3 : le scheduler lance les tasks via l'API (pas localhost dans Docker)
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow:8080/execution/
-  # Variables Airflow (surchargent les défauts du DAG)
     AIRFLOW_VAR_MINIO_BUCKET: hopital-data
     AIRFLOW_VAR_MINIO_PREFIX: raw/
     HOPITAL_DB_CONN: postgresql+psycopg2://hopital:hopital@postgres:5432/hopital
@@ -30,9 +39,11 @@ services:
   postgres:
     image: postgres:15
     environment:
+      # Compte admin Postgres + base Airflow (créées au 1er démarrage du volume)
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
+      # Base hopital (hopital/hopital) créée par sql/01-create-hopital-db.sql
     volumes:
       - ./sql/01-create-hopital-db.sql:/docker-entrypoint-initdb.d/01-create-hopital-db.sql
       - ./sql/02-schema.sql:/docker-entrypoint-initdb.d/02-schema.sql
@@ -42,7 +53,7 @@ services:
       interval: 5s
       retries: 5
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   minio:
     image: minio/minio

@@ -1,2 +1,5 @@
 psycopg2-binary
 apache-airflow-providers-fab
+pandas
+boto3
+sqlalchemy

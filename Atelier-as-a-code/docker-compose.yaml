@@ -6,6 +6,8 @@ x-airflow-common: &airflow-common
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__API_AUTH__JWT_SECRET: dev-jwt-secret-change-me-32chars
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  # Airflow 3 : le scheduler lance les tasks via l'API (pas localhost dans Docker)
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow:8080/execution/
   # Variables Airflow (surchargent les défauts du DAG)
     AIRFLOW_VAR_MINIO_BUCKET: hopital-data
     AIRFLOW_VAR_MINIO_PREFIX: raw/

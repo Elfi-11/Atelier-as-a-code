@@ -6,10 +6,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__API_AUTH__JWT_SECRET: dev-jwt-secret-change-me-32chars
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-  # Connexion MinIO (S3) pour dag_minio.py — conn_id minio_default
-    AIRFLOW_CONN_MINIO_DEFAULT: aws://minio:minio123@/?endpoint_url=http%3A%2F%2Fminio%3A9000
   # Variables Airflow (surchargent les défauts du DAG)
-    AIRFLOW_VAR_MINIO_SOURCE_FOLDER: /opt/data
     AIRFLOW_VAR_MINIO_BUCKET: hopital-data
     AIRFLOW_VAR_MINIO_PREFIX: raw/
     HOPITAL_DB_CONN: postgresql+psycopg2://hopital:hopital@postgres:5432/hopital
@@ -51,6 +48,18 @@ services:
       - "9000:9000"
       - "9001:9001"
 
+  minio-init:
+    build: .
+    depends_on:
+      - minio
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+      MINIO_BUCKET: hopital-data
+    entrypoint: python /opt/scripts/upload_minio.py
+    restart: "no"
+
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
@@ -80,8 +89,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
       airflow-init:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -92,8 +101,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
       airflow-init:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -104,8 +113,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
       airflow-init:
         condition: service_completed_successfully
     restart: unless-stopped

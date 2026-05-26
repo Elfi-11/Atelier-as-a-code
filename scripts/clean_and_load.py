@@ -312,25 +312,38 @@ def download_patient_csv_from_minio(
     return sorted(downloaded)
 
 
+def run_download_from_minio(
+    staging_dir: str | Path,
+    bucket: str,
+    prefix: str,
+) -> list[str]:
+    """Télécharge patients_*.csv depuis MinIO. Retourne les chemins locaux."""
+    print("Téléchargement depuis MinIO...")
+    files = download_patient_csv_from_minio(Path(staging_dir), bucket, prefix)
+    return [str(p) for p in files]
+
+
+def run_clean_patient_csv(staging_dir: str | Path, file_paths: list[str]) -> str:
+    """Nettoie les CSV téléchargés. Retourne le chemin du fichier nettoyé."""
+    print("Nettoyage des CSV...")
+    df = load_all_csv_from_paths(file_paths)
+    print(f"Total: {len(df)} patients")
+
+    out = Path(staging_dir) / "patients_clean.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out, index=False, sep=";")
+    print(f"CSV nettoyé: {out}")
+    return str(out)
+
+
 def run_fetch_and_clean_from_minio(
     staging_dir: str | Path,
     bucket: str,
     prefix: str,
 ) -> str:
     """MinIO -> nettoyage -> CSV local. Retourne le chemin du fichier nettoyé."""
-    staging = Path(staging_dir)
-    print("Téléchargement depuis MinIO...")
-    files = download_patient_csv_from_minio(staging, bucket, prefix)
-
-    print("Nettoyage des CSV...")
-    df = load_all_csv_from_paths(files)
-    print(f"Total: {len(df)} patients")
-
-    out = staging / "patients_clean.csv"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out, index=False, sep=";")
-    print(f"CSV nettoyé: {out}")
-    return str(out)
+    paths = run_download_from_minio(staging_dir, bucket, prefix)
+    return run_clean_patient_csv(staging_dir, paths)
 
 
 def run_load_to_postgres(cleaned_path: str | Path, db_url: str | None = None) -> None:

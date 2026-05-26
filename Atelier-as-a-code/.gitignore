@@ -1,9 +1,10 @@
 __pycache__/
-**/__pycache__/
+dags/__pycache__/
 *.py[cod]
 *$py.class
 .Python
 .env
 .venv/
+data/staging/
+*.egg-info/
 .DS_Store
-Atelier-as-a-code/data/staging/

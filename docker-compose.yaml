@@ -100,7 +100,7 @@ services:
 
   airflow-dag-processor:
     <<: *airflow-common
-    command: scheduler
+    command: dag-processor
     depends_on:
       postgres:
         condition: service_healthy

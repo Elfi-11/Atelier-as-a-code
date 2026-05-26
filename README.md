@@ -30,7 +30,7 @@ Les fichiers du projet se trouvent dans ce dossier :
 └── sql/                      # schéma et seeds PostgreSQL
 ```
 
-> **Pipeline option A :** tout passe par le DAG Airflow (plus de `minio-init` ni `hopital-load` au démarrage).
+> **Pipeline :** `minio-init` dépose les CSV bruts dans MinIO au démarrage ; le DAG fait **fetch → clean → load**.
 
 ```powershell
 cd C:\Users\Admin\Atelier-as-a-code
@@ -50,7 +50,9 @@ Services démarrés :
 |---------|------|
 | `postgres` | Base Airflow + base métier `hopital` |
 | `minio` | Stockage objet (CSV bruts) |
+| `minio-init` | Upload des `patients_*.csv` vers `hopital-data/raw/` |
 | `airflow-init` | Initialisation de la base Airflow + utilisateur admin |
+| `airflow-dag-processor` | Lecture des fichiers `dags/` |
 | `airflow` | API / interface web Airflow |
 | `airflow-scheduler` | Planificateur Airflow |
 
@@ -63,8 +65,7 @@ Services démarrés :
 Chaîne des tasks :
 
 ```
-create_bucket → scan_folder → upload_files → verify_upload
-  → fetch_and_clean_from_minio → load_to_postgres
+fetch_from_minio → clean_patient_csv → load_to_postgres
 ```
 
 ### 3. Vérifier les logs

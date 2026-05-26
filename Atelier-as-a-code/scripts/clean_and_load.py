@@ -353,6 +353,7 @@ def run_load_to_postgres(cleaned_path: str | Path, db_url: str | None = None) ->
         raise FileNotFoundError(f"Fichier nettoyé introuvable : {path}")
 
     df = pd.read_csv(path, sep=";")
+    df = df.where(df.notna(), other=None) #
     url = db_url or DB_URL
     print(f"Chargement PostgreSQL ({url.split('@')[-1]})...")
     engine = create_engine(url)
@@ -385,6 +386,16 @@ def load_to_postgres(df: pd.DataFrame, engine) -> None:
         for _, row in df.iterrows():
             service_nom = row.get("service_nom")
             id_service = service_ids.get(service_nom) if pd.notna(service_nom) else None
+            
+            def nullify(v):
+                """Convertit NaN/NA en None pour psycopg2."""
+                if v is None:
+                    return None
+                try:
+                    return None if pd.isna(v) else v
+                except (TypeError, ValueError):
+                    return v
+            
             conn.execute(
                 text(
                     """
@@ -398,16 +409,16 @@ def load_to_postgres(df: pd.DataFrame, engine) -> None:
                     """
                 ),
                 {
-                    "nom": row["nom"],
-                    "prenom": row["prenom"],
-                    "age": row["age"],
-                    "tel": row["tel"],
-                    "pathologie": row["pathologie"],
-                    "commentaire": row["commentaire"],
+                    "nom": nullify(row["nom"]),
+                    "prenom": nullify(row["prenom"]),
+                    "age": nullify(row["age"]),
+                    "tel": nullify(row["tel"]),
+                    "pathologie": nullify(row["pathologie"]),
+                    "commentaire": nullify(row["commentaire"]),
                     "id_service": id_service,
-                    "fichier_source": row["fichier_source"],
-                    "est_valide": bool(row["est_valide"]),
-                    "motif_correction": row["motif_correction"],
+                    "fichier_source": nullify(row["fichier_source"]),
+                    "est_valide": bool(nullify(row["est_valide"])),
+                    "motif_correction": nullify(row["motif_correction"]),
                 },
             )
 

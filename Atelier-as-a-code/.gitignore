@@ -5,6 +5,7 @@ dags/__pycache__/
 .Python
 .env
 .venv/
+logs/
 data/staging/
 *.egg-info/
 .DS_Store

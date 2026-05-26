@@ -161,7 +161,7 @@ default_args = {
 with DAG(
     dag_id="hopital_csv_to_postgres",
     description="CSV patients : upload MinIO, nettoyage, chargement PostgreSQL (1 service -> N patients)",
-    schedule_interval=None,          # déclenché manuellement (ou changez en cron)
+    # schedule_interval=None,          # déclenché manuellement (ou changez en cron)
     start_date=datetime(2024, 1, 1),
     catchup=False,
     default_args=default_args,
@@ -207,7 +207,7 @@ with DAG(
     # --- Tasks PostgreSQL (pipeline MinIO -> Postgres, option A) ---
 
     def fetch_and_clean_from_minio(bucket: str, prefix: str, **_) -> str:
-        from clean_and_load import run_fetch_and_clean_from_minio
+        from scripts.clean_and_load import run_fetch_and_clean_from_minio
 
         return run_fetch_and_clean_from_minio(
             staging_dir="/opt/airflow/data/staging",
@@ -216,7 +216,7 @@ with DAG(
         )
 
     def load_to_postgres_task(ti, **_) -> None:
-        from clean_and_load import run_load_to_postgres
+        from scripts.clean_and_load import run_load_to_postgres
 
         cleaned_path = ti.xcom_pull(task_ids="fetch_and_clean_from_minio")
         if not cleaned_path:

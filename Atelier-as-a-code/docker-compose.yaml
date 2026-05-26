@@ -14,6 +14,10 @@ services:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
+    volumes:
+      - ./sql/01-create-hopital-db.sql:/docker-entrypoint-initdb.d/01-create-hopital-db.sql
+      - ./sql/02-schema.sql:/docker-entrypoint-initdb.d/02-schema.sql
+      - ./sql/03-seed-services.sql:/docker-entrypoint-initdb.d/03-seed-services.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U airflow"]
       interval: 5s
@@ -30,6 +34,31 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+
+  minio-init:
+    build: .
+    depends_on:
+      - minio
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+      MINIO_BUCKET: hopital-data
+    entrypoint: python /opt/scripts/upload_minio.py
+    restart: "no"
+
+  hopital-load:
+    build: .
+    profiles: ["load"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      HOPITAL_DB_CONN: postgresql+psycopg2://hopital:hopital@postgres:5432/hopital
+    entrypoint: python /opt/scripts/clean_and_load.py
+    restart: "no"
 
   airflow-init:
     <<: *airflow-common

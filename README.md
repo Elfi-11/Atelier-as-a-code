@@ -18,20 +18,22 @@ Projet de démonstration : ingestion de fichiers CSV patients via **MinIO**, orc
 Les fichiers du projet se trouvent dans ce dossier :
 
 ```
-Atelier-as-a-code/
+├── dags/
+│   └── dag_minio.py          # DAG unique hopital_csv_to_postgres
+├── data/                     # staging Airflow (staging/raw, patients_clean.csv)
 ├── docker-compose.yaml
 ├── Dockerfile
-├── patients_*.csv          # jeux de données bruts
+├── patients_*.csv            # sources copiées dans l'image (/opt/data)
 ├── scripts/
-│   ├── upload_minio.py     # envoi des CSV vers MinIO
-│   └── clean_and_load.py   # nettoyage + chargement PostgreSQL
-└── sql/                    # schéma et seeds PostgreSQL
+│   ├── upload_minio.py       # logique S3 (référence / tests locaux)
+│   └── clean_and_load.py     # téléchargement MinIO, nettoyage, insert Postgres
+└── sql/                      # schéma et seeds PostgreSQL
 ```
 
-> **Important :** lancez toutes les commandes Docker **depuis ce dossier** (là où se trouve `docker-compose.yaml`), pas depuis la racine du dépôt Git parent.
+> **Pipeline option A :** tout passe par le DAG Airflow (plus de `minio-init` ni `hopital-load` au démarrage).
 
 ```powershell
-cd C:\Users\Admin\Atelier-as-a-code\Atelier-as-a-code
+cd C:\Users\Admin\Atelier-as-a-code
 ```
 
 ## Démarrage rapide
@@ -48,20 +50,22 @@ Services démarrés :
 |---------|------|
 | `postgres` | Base Airflow + base métier `hopital` |
 | `minio` | Stockage objet (CSV bruts) |
-| `minio-init` | Upload automatique des `patients_*.csv` vers MinIO |
 | `airflow-init` | Initialisation de la base Airflow + utilisateur admin |
 | `airflow` | API / interface web Airflow |
 | `airflow-scheduler` | Planificateur Airflow |
 
-### 2. Charger les données en PostgreSQL
+### 2. Exécuter le pipeline (DAG)
 
-Le chargement est dans le profil `load` (il ne démarre pas automatiquement) :
+1. Ouvrir http://localhost:8080 (`airflow` / `airflow`)
+2. Activer le DAG **`hopital_csv_to_postgres`**
+3. **Trigger DAG** (déclenchement manuel)
 
-```powershell
-docker compose --profile load up hopital-load
+Chaîne des tasks :
+
 ```
-
-Ce conteneur exécute `clean_and_load.py` : nettoyage des CSV puis insertion dans les tables `service` et `patient`.
+create_bucket → scan_folder → upload_files → verify_upload
+  → fetch_and_clean_from_minio → load_to_postgres
+```
 
 ### 3. Vérifier les logs
 
@@ -72,7 +76,7 @@ docker compose logs -f
 # Un service précis
 docker compose logs -f postgres
 docker compose logs -f airflow
-docker compose logs hopital-load
+docker compose logs airflow-scheduler
 ```
 
 ## Accès aux services
@@ -179,14 +183,13 @@ docker compose down -v
 docker compose up -d --build
 ```
 
-### `hopital-load` échoue
+### Le DAG échoue sur `fetch_and_clean_from_minio` ou `load_to_postgres`
 
-Vérifiez que Postgres et `minio-init` sont terminés avec succès :
+Vérifiez que MinIO et Postgres sont démarrés, puis consultez les logs de la task dans l'UI Airflow ou :
 
 ```powershell
 docker compose ps -a
-docker compose logs minio-init
-docker compose logs hopital-load
+docker compose logs airflow-scheduler
 ```
 
 ## Stack technique

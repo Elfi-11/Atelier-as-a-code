@@ -159,8 +159,8 @@ default_args = {
 }
 
 with DAG(
-    dag_id="upload_folder_to_minio",
-    description="Upload récursif d'un dossier local vers un bucket MinIO",
+    dag_id="hopital_csv_to_postgres",
+    description="CSV patients : upload MinIO, nettoyage, chargement PostgreSQL (1 service -> N patients)",
     schedule_interval=None,          # déclenché manuellement (ou changez en cron)
     start_date=datetime(2024, 1, 1),
     catchup=False,
@@ -204,5 +204,38 @@ with DAG(
         },
     )
 
-    # Chaîne d'exécution
-    t_create_bucket >> t_scan >> t_upload >> t_verify
+    # --- Tasks PostgreSQL (pipeline MinIO -> Postgres, option A) ---
+
+    def fetch_and_clean_from_minio(bucket: str, prefix: str, **_) -> str:
+        from clean_and_load import run_fetch_and_clean_from_minio
+
+        return run_fetch_and_clean_from_minio(
+            staging_dir="/opt/airflow/data/staging",
+            bucket=bucket,
+            prefix=prefix,
+        )
+
+    def load_to_postgres_task(ti, **_) -> None:
+        from clean_and_load import run_load_to_postgres
+
+        cleaned_path = ti.xcom_pull(task_ids="fetch_and_clean_from_minio")
+        if not cleaned_path:
+            raise ValueError("Aucun chemin CSV nettoyé reçu depuis fetch_and_clean_from_minio")
+        run_load_to_postgres(cleaned_path)
+
+    t_fetch_clean = PythonOperator(
+        task_id="fetch_and_clean_from_minio",
+        python_callable=fetch_and_clean_from_minio,
+        op_kwargs={
+            "bucket": "{{ params.bucket }}",
+            "prefix": "{{ params.prefix }}",
+        },
+    )
+
+    t_load_postgres = PythonOperator(
+        task_id="load_to_postgres",
+        python_callable=load_to_postgres_task,
+    )
+
+    # Chaîne complète : MinIO (Amandine) -> PostgreSQL (Marina)
+    t_create_bucket >> t_scan >> t_upload >> t_verify >> t_fetch_clean >> t_load_postgres

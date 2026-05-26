@@ -245,8 +245,9 @@ def find_csv_files() -> list[str]:
     raise FileNotFoundError("Aucun fichier patients_*.csv trouvé")
 
 
-def load_all_csv() -> pd.DataFrame:
-    files = find_csv_files()
+def load_all_csv_from_paths(files: list[str | Path]) -> pd.DataFrame:
+    if not files:
+        raise FileNotFoundError("Aucun fichier patients_*.csv trouvé")
 
     frames = []
     for file_path in files:
@@ -258,6 +259,92 @@ def load_all_csv() -> pd.DataFrame:
         print(f"  {path.name}: {len(cleaned)} lignes nettoyées")
 
     return pd.concat(frames, ignore_index=True)
+
+
+def load_all_csv() -> pd.DataFrame:
+    return load_all_csv_from_paths(find_csv_files())
+
+
+def download_patient_csv_from_minio(
+    staging_dir: Path,
+    bucket: str,
+    prefix: str,
+) -> list[Path]:
+    """Télécharge patients_*.csv depuis MinIO vers un dossier local."""
+    import boto3
+
+    endpoint = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
+    access_key = os.environ.get("MINIO_ACCESS_KEY", "minio")
+    secret_key = os.environ.get("MINIO_SECRET_KEY", "minio123")
+
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir = staging_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name="us-east-1",
+    )
+
+    prefix_norm = prefix.rstrip("/") + "/" if prefix else ""
+    downloaded: list[Path] = []
+
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix_norm):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            name = Path(key).name
+            if not name.startswith("patients_") or not name.endswith(".csv"):
+                continue
+            dest = raw_dir / name
+            client.download_file(bucket, key, str(dest))
+            downloaded.append(dest)
+            print(f"  <- s3://{bucket}/{key}")
+
+    if not downloaded:
+        raise FileNotFoundError(
+            f"Aucun patients_*.csv sous s3://{bucket}/{prefix_norm}"
+        )
+
+    return sorted(downloaded)
+
+
+def run_fetch_and_clean_from_minio(
+    staging_dir: str | Path,
+    bucket: str,
+    prefix: str,
+) -> str:
+    """MinIO -> nettoyage -> CSV local. Retourne le chemin du fichier nettoyé."""
+    staging = Path(staging_dir)
+    print("Téléchargement depuis MinIO...")
+    files = download_patient_csv_from_minio(staging, bucket, prefix)
+
+    print("Nettoyage des CSV...")
+    df = load_all_csv_from_paths(files)
+    print(f"Total: {len(df)} patients")
+
+    out = staging / "patients_clean.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out, index=False, sep=";")
+    print(f"CSV nettoyé: {out}")
+    return str(out)
+
+
+def run_load_to_postgres(cleaned_path: str | Path, db_url: str | None = None) -> None:
+    """Charge le CSV nettoyé dans PostgreSQL (service + patient)."""
+    path = Path(cleaned_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Fichier nettoyé introuvable : {path}")
+
+    df = pd.read_csv(path, sep=";")
+    url = db_url or DB_URL
+    print(f"Chargement PostgreSQL ({url.split('@')[-1]})...")
+    engine = create_engine(url)
+    load_to_postgres(df, engine)
+    print("Chargement terminé.")
 
 
 def load_to_postgres(df: pd.DataFrame, engine) -> None:

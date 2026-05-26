@@ -13,6 +13,11 @@ x-airflow-common: &airflow-common
     AIRFLOW_VAR_MINIO_BUCKET: hopital-data
     AIRFLOW_VAR_MINIO_PREFIX: raw/
     HOPITAL_DB_CONN: postgresql+psycopg2://hopital:hopital@postgres:5432/hopital
+    MINIO_ENDPOINT: http://minio:9000
+    MINIO_ACCESS_KEY: minio
+    MINIO_SECRET_KEY: minio123
+    MINIO_BUCKET: hopital-data
+    PYTHONPATH: /opt/scripts
   volumes: &airflow-volumes
     - ./dags:/opt/airflow/dags
     - ./data:/opt/airflow/data
@@ -45,31 +50,6 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
-
-  minio-init:
-    build: .
-    depends_on:
-      - minio
-    environment:
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: minio
-      MINIO_SECRET_KEY: minio123
-      MINIO_BUCKET: hopital-data
-    entrypoint: python /opt/scripts/upload_minio.py
-    restart: "no"
-
-  hopital-load:
-    build: .
-    profiles: ["load"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
-    environment:
-      HOPITAL_DB_CONN: postgresql+psycopg2://hopital:hopital@postgres:5432/hopital
-    entrypoint: python /opt/scripts/clean_and_load.py
-    restart: "no"
 
   airflow-init:
     <<: *airflow-common
